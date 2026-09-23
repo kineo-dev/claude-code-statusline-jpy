@@ -1,0 +1,21 @@
+# Claude Code statusline cache & temporary files
+*.cache
+*.lock
+*.fail
+*.tmp*
+
+# Environment files
+.env
+.env.*
+
+# Internal notes & documentation
+brain/
+
+# OS & Editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
