@@ -9,7 +9,7 @@ now=$(date +%s)
 C_RESET=$'\e[0m'
 C_PURPLE=$'\e[38;2;167;139;250m'   # model name
 C_GREEN=$'\e[38;2;130;180;100m'    # healthy (<60%)
-C_AMBER=$'\e[38;2;229;192;123m'    # warning (>=60%) / Opus (except 5.5) !
+C_AMBER=$'\e[38;2;229;192;123m'    # warning (>=60%) / Opus !
 C_RED=$'\e[38;2;224;108;117m'      # critical (>=80%) / Fable !!
 C_DIM=$'\e[38;2;92;99;112m'        # labels
 SESSION_WINDOW_SEC=18000
@@ -347,7 +347,7 @@ out=""
 if [ -n "$model_display" ]; then
     model_short=$(echo "$model_display" | tr -d ' ')
     model_str="${model_short}"
-    if [[ "$model_id" == *"opus"* && "$model_id" != *"opus-5-5"* ]]; then
+    if [[ "$model_id" == *"opus"* ]]; then
         out="${C_AMBER}!${model_str}${C_RESET}"
     elif [[ "$model_id" == *"fable"* ]]; then
         out="${C_RED}!!${model_str}${C_RESET}"
