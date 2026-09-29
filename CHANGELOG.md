@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - **`cost_budget.cache` has no lock around concurrent reads/writes** (#16, flagged 2026-08-23) — two sessions rendering their statusline at the same moment could race on the same file: each reads the full file, recomputes its own line plus a snapshot of "other sessions'" lines, and writes the merged result back, so a losing writer's update to its own line can be overwritten by a concurrent writer's stale copy of it. Re-verified 2026-08-23 by tracing the actual read-merge-write logic (not just re-stating the original finding): confirmed low-frequency in practice, and self-healing (the losing session's own next render always recomputes its own line from its live `cost_usd` counter, so the worst case is one render cycle of a slightly-stale "Today" total shown to *other* sessions, not corruption or a persistent wrong number). The identical read-merge-write pattern also exists in `cost_session_state.cache`, not just `cost_budget.cache` — noted here since it wasn't called out as a separate item in the original review. **Decision: deferred, intentionally left unfixed.** A correct fix needs `flock` around the critical section, which adds latency to a hot path (the statusline script runs on every Claude Code render); the tradeoff isn't worth it for a self-correcting cosmetic glitch. A lower-risk fallback if this is ever revisited: `flock -w 0.1` (non-blocking, ~100ms budget) around just the write, skipping the write for that cycle on lock-acquisition failure rather than blocking the render. Revisit only if a genuinely corrupted/stuck cache is ever reported in practice.
 
+## 2026-09-29
+
+- **Changed**: Sonnet 5.5 model ID is now matched by family prefix in the cost estimator (`statusline.sh` and `statusline.ps1`). Updated model name legend in `README.md`.
+
 ## 2026-09-28
 
 - **Reverted**: Opus 5.5 is no longer excluded from the amber ! warning prefix in statusline.sh/statusline.ps1 (Claude Code's default model changed again; Opus 5.5 is no longer the default). Updated the model name marker legend in README.md accordingly.

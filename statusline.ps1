@@ -45,7 +45,7 @@ function Get-PriceForModel($model) {
         return @{ In = 4.00; Out = 20.00; CWrite = 5.00; CRead = 0.20 }
     } elseif ($model -cmatch '^claude-opus-5(-|$)') {
         return @{ In = 5.00; Out = 25.00; CWrite = 6.25; CRead = 0.50 }
-    } elseif ($model -eq 'claude-sonnet-5') {
+    } elseif ($model -cmatch '^claude-sonnet-5(-|$)') {
         return Get-Sonnet5Rate
     } elseif ($model -cmatch '^claude-sonnet-4-') {
         return @{ In = 3.00; Out = 15.00; CWrite = 3.75; CRead = 0.30 }

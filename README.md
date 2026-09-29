@@ -41,7 +41,7 @@ Fable5.1 user:
 
 | Field | Description |
 |---|---|
-| `Sonnet5` / `!Opus5` / `!Opus5.5` / `!!Fable5.1` | Model name; all Opus models (including 5.5) show amber `!`, Fable shows red `!!` |
+| `Sonnet5` / `Sonnet5.5` / `!Opus5` / `!Opus5.5` / `!!Fable5.1` | Model name; all Opus models (including 5.5) show amber `!`, Fable shows red `!!` |
 | `Sess:XX%(HH:MM)` / `Sess:-` | 5-hour rate limit usage and reset time; shows `-` on Max when the API doesn't report limits |
 | `Week:XX%(XdXh)` / `Week:-` | 7-day rate limit usage and time until reset; shows `-` on Max when the API doesn't report limits |
 | `Ctx:▰▰▱▱▱XX%(CachXX%)` | Context window usage (5-segment bar); includes cache hit rate as `(CachXX%)` when transcript is available |

@@ -130,7 +130,7 @@ compute_cost_estimate() {
             if ($model | test("^claude-opus-4-")) then {in:5.00, out:25.00, cwrite:6.25, cread:0.50}
             elif ($model | test("^claude-opus-5-5(-|$)")) then {in:4.00, out:20.00, cwrite:5.00, cread:0.20}
             elif ($model | test("^claude-opus-5(-|$)")) then {in:5.00, out:25.00, cwrite:6.25, cread:0.50}
-            elif ($model == "claude-sonnet-5") then sonnet5_rate
+            elif ($model | test("^claude-sonnet-5(-|$)")) then sonnet5_rate
             elif ($model | test("^claude-sonnet-4-")) then {in:3.00, out:15.00, cwrite:3.75, cread:0.30}
             elif ($model | test("^claude-haiku-4-")) then {in:1.00, out:5.00, cwrite:1.25, cread:0.10}
             elif ($model | test("^claude-(fable|mythos)-")) then {in:10.00, out:50.00, cwrite:12.50, cread:1.00}
