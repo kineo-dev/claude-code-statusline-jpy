@@ -27,6 +27,31 @@ function Get-PathLockSuffix($s) {
     } finally { $md5.Dispose() }
 }
 
+# Model identifier normalization and label derivation
+# NOTE: In sync with statusline.sh logic; marked as untested.
+function Normalize-ModelId($raw) {
+    if ([string]::IsNullOrWhiteSpace($raw)) { return "" }
+    $m = $raw -replace '^[a-z]+\.anthropic\.', ''
+    $m = $m -replace '^anthropic\.', ''
+    $m = $m -replace '@.*$', ''
+    $m = $m -replace '-v\d+:\d+$', ''
+    $m = $m -replace '\[.*\]$', ''
+    $m = $m -replace '-\d{8}$', ''
+    return $m
+}
+
+function Get-ModelLabel($raw) {
+    $norm = Normalize-ModelId $raw
+    if ($norm -match '^(?:claude-)?([a-zA-Z]+)-(\d+(?:-\d+)*)$') {
+        $family = $Matches[1]
+        $version = $Matches[2]
+        $familyCap = $family.Substring(0,1).ToUpper() + $family.Substring(1).ToLower()
+        $verDot = $version -replace '-', '.'
+        return "${familyCap}${verDot}"
+    }
+    return $null
+}
+
 function Get-Sonnet5Rate {
     if ((Get-Date) -lt [datetime]'2026-09-01') {
         return @{ In = 2.00; Out = 10.00; CWrite = 2.50; CRead = 0.20 }
@@ -73,13 +98,7 @@ function Get-CostEstimate($path) {
         if ($null -eq $usage) { continue }
         $model = $entry.message.model
         if ([string]::IsNullOrWhiteSpace($model)) { $model = $defaultKey }
-        # us.anthropic.claude-*-20250929-v1:0 (Bedrock cross-region), anthropic.claude-*,
-        # claude-*@20250929 (Vertex), claude-*-20250929 (API) all normalize to the bare id
-        $model = $model -replace '^[a-z]+\.anthropic\.', ''
-        $model = $model -replace '^anthropic\.', ''
-        $model = $model -replace '@.*$', ''
-        $model = $model -replace '-v\d+:\d+$', ''
-        $model = $model -replace '-\d{8}$', ''
+        $model = Normalize-ModelId $model
         $rate = Get-PriceForModel $model
         $inTok  = if ($null -ne $usage.input_tokens) { [double]$usage.input_tokens } else { 0.0 }
         $outTok = if ($null -ne $usage.output_tokens) { [double]$usage.output_tokens } else { 0.0 }
@@ -458,16 +477,22 @@ if (-not [string]::IsNullOrWhiteSpace($transcriptPath) -and (Test-Path -LiteralP
     }
 }
 
-$isMaxNoRl    = (-not $hasRl) -and $modelDisplay -and $isSubscriber
-
 # Model prefix
+# NOTE: In sync with statusline.sh logic; marked as untested.
+$modelLabel = if (-not [string]::IsNullOrWhiteSpace($modelId)) { Get-ModelLabel $modelId } else { $null }
+if ([string]::IsNullOrWhiteSpace($modelLabel) -and $modelDisplay) {
+    $modelLabel = $modelDisplay -replace ' ', ''
+}
+$isMaxNoRl    = (-not $hasRl) -and $modelLabel -and $isSubscriber
+
 $out = ""
-if ($modelDisplay) {
-    $modelShort = $modelDisplay -replace ' ', ''
-    $modelStr   = $modelShort
-    if ($modelId -cmatch 'opus') {
+if ($modelLabel) {
+    $modelStr = $modelLabel
+    $normMid  = Normalize-ModelId $modelId
+    $checkTarget = if (-not [string]::IsNullOrWhiteSpace($normMid)) { $normMid } else { $modelStr }
+    if ($checkTarget -cmatch 'opus|Opus') {
         $out = "${C_AMBER}!${modelStr}${C_RESET}"
-    } elseif ($modelId -cmatch 'fable') {
+    } elseif ($checkTarget -cmatch 'fable|Fable') {
         $out = "${C_RED}!!${modelStr}${C_RESET}"
     } else {
         $out = "${C_PURPLE}${modelStr}${C_RESET}"

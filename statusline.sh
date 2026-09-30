@@ -96,6 +96,33 @@ draw_bar() {
 stat_mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0; }
 add_commas() { printf '%d' "$1" | rev | sed 's/\([0-9]\{3\}\)/\1,/g' | sed 's/,$//' | rev; }
 
+normalize_model_id() {
+    local raw="$1"
+    [ -z "$raw" ] && return 0
+    printf '%s' "$raw" | sed -E \
+        -e 's/^[a-z]+\.anthropic\.//' \
+        -e 's/^anthropic\.//' \
+        -e 's/@.*$//' \
+        -e 's/-v[0-9]+:[0-9]+$//' \
+        -e 's/\[.*\]$//' \
+        -e 's/-[0-9]{8}$//'
+}
+
+parse_model_label() {
+    local raw="$1"
+    local norm
+    norm=$(normalize_model_id "$raw")
+    if [[ "$norm" =~ ^(claude-)?([a-zA-Z]+)-([0-9]+(-[0-9]+)*)$ ]]; then
+        local family="${BASH_REMATCH[2]}"
+        local version="${BASH_REMATCH[3]}"
+        local family_cap="$(tr '[:lower:]' '[:upper:]' <<< "${family:0:1}")${family:1}"
+        local ver_dot="${version//-/.}"
+        printf '%s' "${family_cap}${ver_dot}"
+        return 0
+    fi
+    return 1
+}
+
 # Empty/whitespace-only stdin: jq itself would just exit 0 with no output for
 # this (no error for the check below to catch), which used to render a silent
 # blank line instead of the same "[statusline: bad payload]" diagnostic ps1
@@ -140,7 +167,8 @@ compute_cost_estimate() {
             # us.anthropic.claude-*-20250929-v1:0 (Bedrock cross-region), anthropic.claude-*,
             # claude-*@20250929 (Vertex), claude-*-20250929 (API) all normalize to the bare id
             sub("^[a-z]+\\.anthropic\\."; "") | sub("^anthropic\\."; "") |
-            sub("@.*$"; "") | sub("-v[0-9]+:[0-9]+$"; "") | sub("-[0-9]{8}$"; "");
+            sub("@.*$"; "") | sub("-v[0-9]+:[0-9]+$"; "") |
+            sub("\\[.*\\]$"; "") | sub("-[0-9]{8}$"; "");
         reduce (inputs | fromjson? | objects | select(.type == "assistant") | .message // {} | select(.usage)
                 | { model: ((.model // "claude-sonnet-5") | norm_model), u: .usage }) as $m
         (0;
@@ -344,12 +372,21 @@ fi
 out=""
 
 # Model prefix
-if [ -n "$model_display" ]; then
-    model_short=$(echo "$model_display" | tr -d ' ')
-    model_str="${model_short}"
-    if [[ "$model_id" == *"opus"* ]]; then
+model_label=""
+if [ -n "$model_id" ]; then
+    model_label=$(parse_model_label "$model_id")
+fi
+if [ -z "$model_label" ] && [ -n "$model_display" ]; then
+    model_label=$(echo "$model_display" | tr -d ' ')
+fi
+
+if [ -n "$model_label" ]; then
+    model_str="${model_label}"
+    norm_mid=$(normalize_model_id "$model_id")
+    check_target="${norm_mid:-$model_str}"
+    if [[ "$check_target" == *"opus"* || "$check_target" == *"Opus"* ]]; then
         out="${C_AMBER}!${model_str}${C_RESET}"
-    elif [[ "$model_id" == *"fable"* ]]; then
+    elif [[ "$check_target" == *"fable"* || "$check_target" == *"Fable"* ]]; then
         out="${C_RED}!!${model_str}${C_RESET}"
     else
         out="${C_PURPLE}${model_str}${C_RESET}"
@@ -362,7 +399,7 @@ if [ -n "$h5_pct" ]; then
     c=$(color_for_rate "$h5_pct" "$h5_reset" $SESSION_WINDOW_SEC)
     [ -n "$out" ] && out="$out "
     out="${out}${C_DIM}Sess:${C_RESET}${c}${h5_pct}%${C_DIM}(${rst})${C_RESET}"
-elif [ -z "$has_rl" ] && [ -n "$model_display" ] && [ -n "$is_subscriber" ]; then
+elif [ -z "$has_rl" ] && [ -n "$model_label" ] && [ -n "$is_subscriber" ]; then
     [ -n "$out" ] && out="$out "
     out="${out}${C_DIM}Sess:-${C_RESET}"
 fi
@@ -373,7 +410,7 @@ if [ -n "$d7_pct" ]; then
     c=$(color_for_rate "$d7_pct" "$d7_reset" $WEEK_WINDOW_SEC)
     [ -n "$out" ] && out="$out "
     out="${out}${C_DIM}Week:${C_RESET}${c}${d7_pct}%${C_DIM}(${rst})${C_RESET}"
-elif [ -z "$has_rl" ] && [ -n "$model_display" ] && [ -n "$is_subscriber" ]; then
+elif [ -z "$has_rl" ] && [ -n "$model_label" ] && [ -n "$is_subscriber" ]; then
     [ -n "$out" ] && out="$out "
     out="${out}${C_DIM}Week:-${C_RESET}"
 fi
