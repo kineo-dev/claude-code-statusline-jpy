@@ -52,6 +52,33 @@ function Get-ModelLabel($raw) {
     return $null
 }
 
+# Model default effort from docs (https://code.claude.com/docs/en/model-config.md "Adjust effort level").
+# Update this table when a new model with a non-high default appears.
+# NOTE: In sync with statusline.sh logic; marked as untested.
+function Get-DefaultEffort($norm) {
+    if ([string]::IsNullOrWhiteSpace($norm)) { return "high" }
+    $res = "high"
+    switch -Regex ($norm) {
+        'opus-5-5|sonnet-5-5|Opus5\.5|Sonnet5\.5' { $res = "medium"; break }
+        'opus-4-7|Opus4\.7'                     { $res = "xhigh"; break }
+        default                                  { $res = "high"; break }
+    }
+    return $res
+}
+
+function Get-EffortValue($effort) {
+    $val = 0
+    switch ($effort) {
+        'low'    { $val = 1; break }
+        'medium' { $val = 2; break }
+        'high'   { $val = 3; break }
+        'xhigh'  { $val = 4; break }
+        'max'    { $val = 5; break }
+        default  { $val = 0; break }
+    }
+    return $val
+}
+
 function Get-Sonnet5Rate {
     if ((Get-Date) -lt [datetime]'2026-09-01') {
         return @{ In = 2.00; Out = 10.00; CWrite = 2.50; CRead = 0.20 }
@@ -329,6 +356,7 @@ $modelId      = $data.model.id
 # write) so a malicious/compromised backend can't inject terminal escape
 # sequences via the displayed model name. Mirrors statusline.sh's equivalent guard.
 $modelDisplay = if ($data.model.display_name) { $data.model.display_name -replace '[\x00-\x1f\x7f-\x9f]', '' } else { $data.model.display_name }
+$effortLevel  = if ($data.effort.level) { ("" + $data.effort.level) -replace '[\x00-\x1f\x7f-\x9f]', '' } else { $null }
 $sessionId    = $data.session_id
 
 # Rate limits (0 is a valid value — always compare against $null, never truthiness)
@@ -490,23 +518,41 @@ if ($modelLabel) {
     $modelStr = $modelLabel
     $normMid  = Normalize-ModelId $modelId
     $checkTarget = if (-not [string]::IsNullOrWhiteSpace($normMid)) { $normMid } else { $modelStr }
+    $warnPrefix = ""
     if ($checkTarget -cmatch 'opus|Opus') {
-        $out = "${C_AMBER}!${modelStr}${C_RESET}"
+        $warnPrefix = "!"
+        $modelColor = $C_AMBER
     } elseif ($checkTarget -cmatch 'fable|Fable') {
-        $out = "${C_RED}!!${modelStr}${C_RESET}"
+        $warnPrefix = "!!"
+        $modelColor = $C_RED
     } else {
-        $out = "${C_PURPLE}${modelStr}${C_RESET}"
+        $modelColor = $C_PURPLE
     }
+
+    $effortSuffix = ""
+    if (-not [string]::IsNullOrWhiteSpace($effortLevel)) {
+        $effortTarget = if (-not [string]::IsNullOrWhiteSpace($normMid)) { $normMid } else { $modelLabel }
+        $defEffort = Get-DefaultEffort $effortTarget
+        $curVal = Get-EffortValue $effortLevel
+        $defVal = Get-EffortValue $defEffort
+        if ($curVal -gt 0 -and $curVal -gt $defVal) {
+            $effortSuffix = "${C_RED}(${effortLevel})${C_RESET}"
+        } else {
+            $effortSuffix = "${modelColor}(${effortLevel})${C_RESET}"
+        }
+    }
+
+    $out = "${modelColor}${warnPrefix}${modelStr}${C_RESET}${effortSuffix}"
 }
 
 if ($null -ne $h5_pct) {
     $rst = Get-ResetHM $h5_reset
     $c   = Get-ColorForRate $h5_pct $h5_reset $SessionWindowSec
     if ($out) { $out += " " }
-    $out += "${C_DIM}Sess:${C_RESET}${c}${h5_pct}%${C_DIM}(${rst})${C_RESET}"
+    $out += "${C_DIM}Ses:${C_RESET}${c}${h5_pct}%${C_DIM}(${rst})${C_RESET}"
 } elseif ($isMaxNoRl) {
     if ($out) { $out += " " }
-    $out += "${C_DIM}Sess:-${C_RESET}"
+    $out += "${C_DIM}Ses:-${C_RESET}"
 }
 if ($null -ne $d7_pct) {
     $rst = Get-ResetDH $d7_reset
@@ -743,24 +789,24 @@ if ($null -ne $costUsd) {
             $sessionJpyFmt = "{0:N0}" -f $sessionJpy
             if ($isSubscriber) {
                 if ($out) { $out += " " }
-                $out += "${C_DIM}Cost:${C_RESET}${C_GREEN}~`$${costFmt}${C_DIM}(${C_RESET}${C_GREEN}~¥${totalJpyFmt}${C_DIM})${C_RESET}"
+                $out += "${C_DIM}Cst:${C_RESET}${C_GREEN}~`$${costFmt}${C_DIM}(${C_RESET}${C_GREEN}~¥${totalJpyFmt}${C_DIM})${C_RESET}"
             } elseif ($budgetJpy -gt 0) {
                 $budgetJpyFmt = "{0:N0}" -f $budgetJpy
                 $pct  = [Math]::Min([int][Math]::Floor($totalJpy * 100 / $budgetJpy), 100)
                 $c    = Get-ColorForPct $pct
                 $warn = if ($pct -ge 100) { "!!" } else { "" }
                 if ($out) { $out += " " }
-                $out += "${C_DIM}Cost:${C_RESET}${c}${warn}$(New-Bar $pct)${C_RESET}${c}${estPrefix}`$${costFmt}${C_RESET}${C_DIM}(${C_RESET}${c}¥${sessionJpyFmt}${C_RESET} ${C_DIM}Today:${C_RESET}${c}¥${totalJpyFmt}${C_DIM}/¥${budgetJpyFmt})${C_RESET}"
+                $out += "${C_DIM}Cst:${C_RESET}${c}${warn}$(New-Bar $pct)${C_RESET}${c}${estPrefix}`$${costFmt}${C_RESET}${C_DIM}(${C_RESET}${c}¥${sessionJpyFmt}${C_RESET} ${C_DIM}Today:${C_RESET}${c}¥${totalJpyFmt}${C_DIM}/¥${budgetJpyFmt})${C_RESET}"
             } else {
                 # budget disabled (CC_STATUSLINE_BUDGET_JPY=0): amounts only, no bar
                 if ($out) { $out += " " }
-                $out += "${C_DIM}Cost:${C_RESET}${C_GREEN}${estPrefix}`$${costFmt}${C_DIM}(${C_RESET}${C_GREEN}¥${sessionJpyFmt}${C_RESET} ${C_DIM}Today:${C_RESET}${C_GREEN}¥${totalJpyFmt}${C_DIM})${C_RESET}"
+                $out += "${C_DIM}Cst:${C_RESET}${C_GREEN}${estPrefix}`$${costFmt}${C_DIM}(${C_RESET}${C_GREEN}¥${sessionJpyFmt}${C_RESET} ${C_DIM}Today:${C_RESET}${C_GREEN}¥${totalJpyFmt}${C_DIM})${C_RESET}"
             }
         }
     } elseif ($totalUsd -gt 0) {
         # JPY rate not yet cached (offline / blocked / disabled) — show plain $ amount, no bar/budget
         if ($out) { $out += " " }
-        $out += "${C_DIM}Cost:${C_RESET}${C_GREEN}${estPrefix}`$${costFmt}${C_RESET}"
+        $out += "${C_DIM}Cst:${C_RESET}${C_GREEN}${estPrefix}`$${costFmt}${C_RESET}"
     }
 }
 

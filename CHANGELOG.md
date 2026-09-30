@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## 2026-09-30
 
+- **Changed**: Appended reasoning effort suffix to model label with above-default red warning (e.g. `Sonnet5.5(medium)`, `!Opus5.5(high)`). Effort text inherits the model label color when at or below the model's default effort, and turns red when above default. Shortened rate limit and cost labels from `Sess:` / `Sess:-` to `Ses:` / `Ses:-` and `Cost:` to `Cst:` to save statusline width. Synced logic to `statusline.ps1` (marked as untested).
 - **Changed**: Derive statusline model display label directly from normalized `model.id` (`parse_model_label`), with graceful fallback to `model.display_name` when missing or unparseable. Strips provider wrappers, revision/date suffixes, and `[...]` context tags, generically formatting family and version (e.g. `claude-opus-5-5` -> `Opus5.5`). Unified model normalization across warning markers and cost estimation. Synced logic to `statusline.ps1` (marked as untested).
 
 ## 2026-09-29

@@ -10,25 +10,25 @@ A statusline for [Claude Code](https://claude.ai/code) that shows model, rate li
 Subscription user (Pro):
 
 ```
-Sonnet5 Sess:45%(14:30) Week:20%(2d3h) Ctx:▰▰▱▱▱40%(Cach82%) Cost:~$14.24(~¥2,306)
+Sonnet5 Ses:45%(14:30) Week:20%(2d3h) Ctx:▰▰▱▱▱40%(Cach82%) Cst:~$14.24(~¥2,306)
 ```
 
 Subscription user (Max — rate limits not reported by API):
 
 ```
-Sonnet5 Sess:- Week:- Ctx:▰▰▱▱▱40%(Cach82%) Cost:~$14.24(~¥2,306)
+Sonnet5 Ses:- Week:- Ctx:▰▰▱▱▱40%(Cach82%) Cst:~$14.24(~¥2,306)
 ```
 
 API key user with spending limit (2nd session of the day):
 
 ```
-Sonnet5 Ctx:▰▰▱▱▱40%(Cach82%) Cost:▰▰▱▱▱$1.27(¥67 Today:¥200/¥500)
+Sonnet5 Ctx:▰▰▱▱▱40%(Cach82%) Cst:▰▰▱▱▱$1.27(¥67 Today:¥200/¥500)
 ```
 
 API key user, over daily budget:
 
 ```
-!Opus5 Ctx:▰▰▰▱▱60%(Cach82%) Cost:!!▰▰▰▰▰$3.20(¥200 Today:¥510/¥500)
+!Opus5 Ctx:▰▰▰▱▱60%(Cach82%) Cst:!!▰▰▰▰▰$3.20(¥200 Today:¥510/¥500)
 ```
 
 Fable5.1 user:
@@ -42,10 +42,10 @@ Fable5.1 user:
 | Field | Description |
 |---|---|
 | `Sonnet5` / `Sonnet5.5` / `!Opus5` / `!Opus5.5` / `!!Fable5.1` | Model name; all Opus models (including 5.5) show amber `!`, Fable shows red `!!` |
-| `Sess:XX%(HH:MM)` / `Sess:-` | 5-hour rate limit usage and reset time; shows `-` on Max when the API doesn't report limits |
+| `Ses:XX%(HH:MM)` / `Ses:-` | 5-hour rate limit usage and reset time; shows `-` on Max when the API doesn't report limits |
 | `Week:XX%(XdXh)` / `Week:-` | 7-day rate limit usage and time until reset; shows `-` on Max when the API doesn't report limits |
 | `Ctx:▰▰▱▱▱XX%(CachXX%)` | Context window usage (5-segment bar); includes cache hit rate as `(CachXX%)` when transcript is available |
-| `Cost:▰▱▱▱▱$X.XX(¥XXX Today:¥XXX/¥500)` | Daily total in USD, current session and daily total in JPY with budget bar |
+| `Cst:▰▱▱▱▱$X.XX(¥XXX Today:¥XXX/¥500)` | Daily total in USD, current session and daily total in JPY with budget bar |
 
 **Session/Week color behavior:**
 - The displayed percentage is always your raw usage, but the *color* also factors in pace: given how much of the 5-hour/7-day window has elapsed, will you exhaust the limit before it resets?
@@ -58,8 +58,8 @@ Fable5.1 user:
 - First value (`¥XXX`) is the **current session** cost; `Today:¥XXX/¥500` is the **daily cumulative** total across all sessions
 - Daily total resets automatically at midnight
 - Exchange rate fetched weekly from ECB (European Central Bank) via [frankfurter.dev](https://www.frankfurter.dev/)
-- If the exchange rate hasn't been fetched yet (or the host can't reach frankfurter.dev), the Cost field still shows the plain USD amount (e.g. `Cost:$1.27`) without the JPY conversion/budget bar, until the background refresh completes
-- **Subscription plans (Pro/Max)** display a plain `Cost:~$X.XX(~¥X,XXX)` format (no budget bar/warning, where `~` signals a client-side estimate rather than actual billing)
+- If the exchange rate hasn't been fetched yet (or the host can't reach frankfurter.dev), the Cost field still shows the plain USD amount (e.g. `Cst:$1.27`) without the JPY conversion/budget bar, until the background refresh completes
+- **Subscription plans (Pro/Max)** display a plain `Cst:~$X.XX(~¥X,XXX)` format (no budget bar/warning, where `~` signals a client-side estimate rather than actual billing)
 - **API-key and other billed users** show the full colored budget bar, JPY session/daily total conversion, and `!!` warning prefix when the ¥500 daily budget is exceeded
 
 **Cache hit rate behavior:**
@@ -244,8 +244,8 @@ If you get `command not found` for `jq`, installing the missing tool will fix it
 
 ## Notes
 
-- **Subscription plans (Pro/Max)** display a plain estimate with no budget bar (prefixed with `~`, e.g. `Cost:~$14.24(~¥2,306)`)
-- **Claude.ai Max** subscribers see `Sess:-` and `Week:-` — the Anthropic API currently does not report rate limit data for Max accounts. This is a [known bug in Claude Code](https://github.com/anthropics/claude-code/issues/63659) affecting all platforms (not Windows-only despite the issue title). The script displays `-` as a placeholder until Anthropic fixes the upstream issue
+- **Subscription plans (Pro/Max)** display a plain estimate with no budget bar (prefixed with `~`, e.g. `Cst:~$14.24(~¥2,306)`)
+- **Claude.ai Max** subscribers see `Ses:-` and `Week:-` — the Anthropic API currently does not report rate limit data for Max accounts. This is a [known bug in Claude Code](https://github.com/anthropics/claude-code/issues/63659) affecting all platforms (not Windows-only despite the issue title). The script displays `-` as a placeholder until Anthropic fixes the upstream issue
 - **Subscription plan edge case**: If you are on a subscription plan (Pro/Max) but the Cost field still shows the API-key-style colored budget bar instead of the plain `~$X.XX(~¥X,XXX)` estimate, check whether `ANTHROPIC_API_KEY`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, or `CLAUDE_CODE_USE_FOUNDRY` happen to be set in your shell environment (e.g. left over from an unrelated project). The script uses these to distinguish real billed API/cloud usage from a Claude.ai OAuth subscription whenever `rate_limits` is not reported by the API (which is always the case for Max due to the bug above) -- unset them if they are not actually being used for this session.
 - **API key** shows the Cost field reflecting actual billed spend from Anthropic
 - JPY conversion uses a weekly-cached exchange rate from ECB and will not reflect real-time fluctuations. If the rate hasn't been fetched yet (or is unreachable from your network), the Cost field falls back to a plain USD amount with no JPY conversion/budget bar — it does not disappear entirely

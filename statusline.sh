@@ -123,6 +123,34 @@ parse_model_label() {
     return 1
 }
 
+# Model default effort from docs (https://code.claude.com/docs/en/model-config.md "Adjust effort level").
+# Update this table when a new model with a non-high default appears.
+get_default_effort() {
+    local norm="$1"
+    case "$norm" in
+        *opus-5-5*|*sonnet-5-5*|*Opus5.5*|*Sonnet5.5*)
+            echo "medium"
+            ;;
+        *opus-4-7*|*Opus4.7*)
+            echo "xhigh"
+            ;;
+        *)
+            echo "high"
+            ;;
+    esac
+}
+
+effort_to_val() {
+    case "$1" in
+        low)    echo 1 ;;
+        medium) echo 2 ;;
+        high)   echo 3 ;;
+        xhigh)  echo 4 ;;
+        max)    echo 5 ;;
+        *)      echo 0 ;;
+    esac
+}
+
 # Empty/whitespace-only stdin: jq itself would just exit 0 with no output for
 # this (no error for the check below to catch), which used to render a silent
 # blank line instead of the same "[statusline: bad payload]" diagnostic ps1
@@ -205,6 +233,7 @@ jq_fields=$(echo "$input" | jq -r '
     "cost_usd="      + (if .cost.total_cost_usd != null then (.cost.total_cost_usd | tostring) else "" end | @sh) + "\n" +
     "cwd="           + (.cwd // "" | @sh) + "\n" +
     "transcript_path=" + (.transcript_path // "" | @sh) + "\n" +
+    "effort_level="  + (.effort.level // "" | @sh) + "\n" +
     "has_rl="        + (if .rate_limits != null then "1" else "" end | @sh)
 ' 2>/dev/null)
 # jq failed to parse the payload (malformed JSON) -- degrade the same way the
@@ -232,6 +261,9 @@ eval "$jq_fields"
 # terminal escape sequences via the displayed model name.
 if [ -n "$model_display" ]; then
     model_display=$(printf '%s' "$model_display" | tr -d '\000-\037\177-\237')
+fi
+if [ -n "$effort_level" ]; then
+    effort_level=$(printf '%s' "$effort_level" | tr -d '\000-\037\177-\237')
 fi
 
 # === Determine subscriber status ===
@@ -384,13 +416,30 @@ if [ -n "$model_label" ]; then
     model_str="${model_label}"
     norm_mid=$(normalize_model_id "$model_id")
     check_target="${norm_mid:-$model_str}"
+    warn_prefix=""
     if [[ "$check_target" == *"opus"* || "$check_target" == *"Opus"* ]]; then
-        out="${C_AMBER}!${model_str}${C_RESET}"
+        warn_prefix="!"
+        model_color="$C_AMBER"
     elif [[ "$check_target" == *"fable"* || "$check_target" == *"Fable"* ]]; then
-        out="${C_RED}!!${model_str}${C_RESET}"
+        warn_prefix="!!"
+        model_color="$C_RED"
     else
-        out="${C_PURPLE}${model_str}${C_RESET}"
+        model_color="$C_PURPLE"
     fi
+
+    effort_suffix=""
+    if [ -n "$effort_level" ]; then
+        def_effort=$(get_default_effort "${norm_mid:-$model_label}")
+        cur_val=$(effort_to_val "$effort_level")
+        def_val=$(effort_to_val "$def_effort")
+        if [ "$cur_val" -gt 0 ] && [ "$cur_val" -gt "$def_val" ]; then
+            effort_suffix="${C_RED}(${effort_level})${C_RESET}"
+        else
+            effort_suffix="${model_color}(${effort_level})${C_RESET}"
+        fi
+    fi
+
+    out="${model_color}${warn_prefix}${model_str}${C_RESET}${effort_suffix}"
 fi
 
 # Session rate limit
@@ -398,10 +447,10 @@ if [ -n "$h5_pct" ]; then
     rst=$(fmt_reset_hm "$h5_reset")
     c=$(color_for_rate "$h5_pct" "$h5_reset" $SESSION_WINDOW_SEC)
     [ -n "$out" ] && out="$out "
-    out="${out}${C_DIM}Sess:${C_RESET}${c}${h5_pct}%${C_DIM}(${rst})${C_RESET}"
+    out="${out}${C_DIM}Ses:${C_RESET}${c}${h5_pct}%${C_DIM}(${rst})${C_RESET}"
 elif [ -z "$has_rl" ] && [ -n "$model_label" ] && [ -n "$is_subscriber" ]; then
     [ -n "$out" ] && out="$out "
-    out="${out}${C_DIM}Sess:-${C_RESET}"
+    out="${out}${C_DIM}Ses:-${C_RESET}"
 fi
 
 # Week rate limit
@@ -568,7 +617,7 @@ if [ -n "$cost_usd" ]; then
         if awk -v tot="$total_usd" 'BEGIN {exit !(tot > 0)}' 2>/dev/null; then
             if [ -n "$is_subscriber" ]; then
                 [ -n "$out" ] && out="$out "
-                out="${out}${C_DIM}Cost:${C_RESET}${C_GREEN}~\$${cost_fmt}${C_DIM}(${C_RESET}${C_GREEN}~¥$(add_commas "$total_jpy")${C_DIM})${C_RESET}"
+                out="${out}${C_DIM}Cst:${C_RESET}${C_GREEN}~\$${cost_fmt}${C_DIM}(${C_RESET}${C_GREEN}~¥$(add_commas "$total_jpy")${C_DIM})${C_RESET}"
             elif [ "$budget_jpy" -gt 0 ]; then
                 pct=$(( total_jpy * 100 / budget_jpy ))
                 [ $pct -gt 100 ] && pct=100
@@ -576,17 +625,17 @@ if [ -n "$cost_usd" ]; then
                 warn=""
                 [ $pct -ge 100 ] && warn="!!"
                 [ -n "$out" ] && out="$out "
-                out="${out}${C_DIM}Cost:${C_RESET}${c}${warn}$(draw_bar "$pct")${C_RESET}${c}${est_prefix}\$${cost_fmt}${C_RESET}${C_DIM}(${C_RESET}${c}¥$(add_commas "$session_jpy")${C_RESET} ${C_DIM}Today:${C_RESET}${c}¥$(add_commas "$total_jpy")${C_DIM}/¥$(add_commas "$budget_jpy"))${C_RESET}"
+                out="${out}${C_DIM}Cst:${C_RESET}${c}${warn}$(draw_bar "$pct")${C_RESET}${c}${est_prefix}\$${cost_fmt}${C_RESET}${C_DIM}(${C_RESET}${c}¥$(add_commas "$session_jpy")${C_RESET} ${C_DIM}Today:${C_RESET}${c}¥$(add_commas "$total_jpy")${C_DIM}/¥$(add_commas "$budget_jpy"))${C_RESET}"
             else
                 # budget disabled (CC_STATUSLINE_BUDGET_JPY=0): amounts only, no bar
                 [ -n "$out" ] && out="$out "
-                out="${out}${C_DIM}Cost:${C_RESET}${C_GREEN}${est_prefix}\$${cost_fmt}${C_DIM}(${C_RESET}${C_GREEN}¥$(add_commas "$session_jpy")${C_RESET} ${C_DIM}Today:${C_RESET}${C_GREEN}¥$(add_commas "$total_jpy")${C_DIM})${C_RESET}"
+                out="${out}${C_DIM}Cst:${C_RESET}${C_GREEN}${est_prefix}\$${cost_fmt}${C_DIM}(${C_RESET}${C_GREEN}¥$(add_commas "$session_jpy")${C_RESET} ${C_DIM}Today:${C_RESET}${C_GREEN}¥$(add_commas "$total_jpy")${C_DIM})${C_RESET}"
             fi
         fi
     elif awk -v tot="$total_usd" 'BEGIN {exit !(tot > 0)}' 2>/dev/null; then
         # JPY rate not yet cached (offline / blocked / disabled) — show plain $ amount, no bar/budget
         [ -n "$out" ] && out="$out "
-        out="${out}${C_DIM}Cost:${C_RESET}${C_GREEN}${est_prefix}\$${cost_fmt}${C_RESET}"
+        out="${out}${C_DIM}Cst:${C_RESET}${C_GREEN}${est_prefix}\$${cost_fmt}${C_RESET}"
     fi
 fi
 
