@@ -128,7 +128,7 @@ parse_model_label() {
 get_default_effort() {
     local norm="$1"
     case "$norm" in
-        *opus-5-5*|*sonnet-5-5*|*Opus5.5*|*Sonnet5.5*)
+        *opus-5-5*|*sonnet-5-5*|*haiku-5-5*|*Opus5.5*|*Sonnet5.5*|*Haiku5.5*)
             echo "medium"
             ;;
         *opus-4-7*|*Opus4.7*)
@@ -178,18 +178,23 @@ compute_cost_estimate() {
     # claude-opus-4-9) is priced correctly with no code change here — only a
     # genuinely new price tier needs a new branch.
     jq -Rn --arg today "$(date +%Y-%m-%d)" '
-        def sonnet5_rate:
-            if $today < "2026-09-01" then {in:2.00, out:10.00, cwrite:2.50, cread:0.20}
-            else {in:3.00, out:15.00, cwrite:3.75, cread:0.30} end;
-        def price_for($model):
+        # Sonnet 5 introductory $2/$10 became the standard price (the 2026-09-01 increase was cancelled).
+        def sonnet5_rate: {in:2.00, out:10.00, cwrite:2.50, cread:0.20};
+        def sonnet55_rate: {in:2.00, out:10.00, cwrite:2.50, cread:0.10};
+        # $pl = prompt length of the request (input + cache write + cache read); only Haiku 5.5 is tiered by it.
+        def price_for($model; $pl):
             if ($model | test("^claude-opus-4-")) then {in:5.00, out:25.00, cwrite:6.25, cread:0.50}
             elif ($model | test("^claude-opus-5-5(-|$)")) then {in:4.00, out:20.00, cwrite:5.00, cread:0.20}
             elif ($model | test("^claude-opus-5(-|$)")) then {in:5.00, out:25.00, cwrite:6.25, cread:0.50}
+            elif ($model | test("^claude-sonnet-5-5(-|$)")) then sonnet55_rate
             elif ($model | test("^claude-sonnet-5(-|$)")) then sonnet5_rate
             elif ($model | test("^claude-sonnet-4-")) then {in:3.00, out:15.00, cwrite:3.75, cread:0.30}
+            elif ($model | test("^claude-haiku-5-")) then
+                (if $pl > 100000 then {in:0.50, out:2.50, cwrite:0.625, cread:0.05}
+                 else {in:0.10, out:0.50, cwrite:0.125, cread:0.01} end)
             elif ($model | test("^claude-haiku-4-")) then {in:1.00, out:5.00, cwrite:1.25, cread:0.10}
             elif ($model | test("^claude-(fable|mythos)-")) then {in:10.00, out:50.00, cwrite:12.50, cread:1.00}
-            else sonnet5_rate  # unrecognized model id: fall back to current-gen Sonnet pricing
+            else sonnet55_rate  # unrecognized model id: fall back to current-gen Sonnet pricing
             end;
         def norm_model:
             # us.anthropic.claude-*-20250929-v1:0 (Bedrock cross-region), anthropic.claude-*,
@@ -200,7 +205,7 @@ compute_cost_estimate() {
         reduce (inputs | fromjson? | objects | select(.type == "assistant") | .message // {} | select(.usage)
                 | { model: ((.model // "claude-sonnet-5") | norm_model), u: .usage }) as $m
         (0;
-            . + ((price_for($m.model)) as $r |
+            . + ((price_for($m.model; (($m.u.input_tokens // 0) + ($m.u.cache_creation_input_tokens // 0) + ($m.u.cache_read_input_tokens // 0)))) as $r |
                 (($m.u.input_tokens // 0) * $r.in +
                  ($m.u.output_tokens // 0) * $r.out +
                  ($m.u.cache_creation_input_tokens // 0) * $r.cwrite +

@@ -59,7 +59,7 @@ function Get-DefaultEffort($norm) {
     if ([string]::IsNullOrWhiteSpace($norm)) { return "high" }
     $res = "high"
     switch -Regex ($norm) {
-        'opus-5-5|sonnet-5-5|Opus5\.5|Sonnet5\.5' { $res = "medium"; break }
+        'opus-5-5|sonnet-5-5|haiku-5-5|Opus5\.5|Sonnet5\.5|Haiku5\.5' { $res = "medium"; break }
         'opus-4-7|Opus4\.7'                     { $res = "xhigh"; break }
         default                                  { $res = "high"; break }
     }
@@ -79,34 +79,43 @@ function Get-EffortValue($effort) {
     return $val
 }
 
+# Sonnet 5 introductory $2/$10 became the standard price (the 2026-09-01 increase was cancelled).
 function Get-Sonnet5Rate {
-    if ((Get-Date) -lt [datetime]'2026-09-01') {
-        return @{ In = 2.00; Out = 10.00; CWrite = 2.50; CRead = 0.20 }
-    }
-    return @{ In = 3.00; Out = 15.00; CWrite = 3.75; CRead = 0.30 }
+    return @{ In = 2.00; Out = 10.00; CWrite = 2.50; CRead = 0.20 }
+}
+function Get-Sonnet55Rate {
+    return @{ In = 2.00; Out = 10.00; CWrite = 2.50; CRead = 0.10 }
 }
 
 # Priced by model *family* (prefix match) rather than one entry per exact
 # release, so a new point release within an existing tier (e.g. a future
 # claude-opus-4-9) is priced correctly with no code change here — only a
 # genuinely new price tier needs a new branch.
-function Get-PriceForModel($model) {
+# $promptTok = prompt length of the request (input + cache write + cache read); only Haiku 5.5 is tiered by it.
+function Get-PriceForModel($model, $promptTok = 0) {
     if ($model -cmatch '^claude-opus-4-') {
         return @{ In = 5.00; Out = 25.00; CWrite = 6.25; CRead = 0.50 }
     } elseif ($model -cmatch '^claude-opus-5-5(-|$)') {
         return @{ In = 4.00; Out = 20.00; CWrite = 5.00; CRead = 0.20 }
     } elseif ($model -cmatch '^claude-opus-5(-|$)') {
         return @{ In = 5.00; Out = 25.00; CWrite = 6.25; CRead = 0.50 }
+    } elseif ($model -cmatch '^claude-sonnet-5-5(-|$)') {
+        return Get-Sonnet55Rate
     } elseif ($model -cmatch '^claude-sonnet-5(-|$)') {
         return Get-Sonnet5Rate
     } elseif ($model -cmatch '^claude-sonnet-4-') {
         return @{ In = 3.00; Out = 15.00; CWrite = 3.75; CRead = 0.30 }
+    } elseif ($model -cmatch '^claude-haiku-5-') {
+        if ($promptTok -gt 100000) {
+            return @{ In = 0.50; Out = 2.50; CWrite = 0.625; CRead = 0.05 }
+        }
+        return @{ In = 0.10; Out = 0.50; CWrite = 0.125; CRead = 0.01 }
     } elseif ($model -cmatch '^claude-haiku-4-') {
         return @{ In = 1.00; Out = 5.00; CWrite = 1.25; CRead = 0.10 }
     } elseif ($model -cmatch '^claude-(fable|mythos)-') {
         return @{ In = 10.00; Out = 50.00; CWrite = 12.50; CRead = 1.00 }
     } else {
-        return Get-Sonnet5Rate  # unrecognized model id: fall back to current-gen Sonnet pricing
+        return Get-Sonnet55Rate  # unrecognized model id: fall back to current-gen Sonnet pricing
     }
 }
 
@@ -126,11 +135,11 @@ function Get-CostEstimate($path) {
         $model = $entry.message.model
         if ([string]::IsNullOrWhiteSpace($model)) { $model = $defaultKey }
         $model = Normalize-ModelId $model
-        $rate = Get-PriceForModel $model
         $inTok  = if ($null -ne $usage.input_tokens) { [double]$usage.input_tokens } else { 0.0 }
         $outTok = if ($null -ne $usage.output_tokens) { [double]$usage.output_tokens } else { 0.0 }
         $cwTok  = if ($null -ne $usage.cache_creation_input_tokens) { [double]$usage.cache_creation_input_tokens } else { 0.0 }
         $crTok  = if ($null -ne $usage.cache_read_input_tokens) { [double]$usage.cache_read_input_tokens } else { 0.0 }
+        $rate = Get-PriceForModel $model ($inTok + $cwTok + $crTok)
         $total += ($inTok * $rate.In + $outTok * $rate.Out + $cwTok * $rate.CWrite + $crTok * $rate.CRead) / 1000000
     }
     return $total
