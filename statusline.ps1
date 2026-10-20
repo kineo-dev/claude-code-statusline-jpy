@@ -130,6 +130,7 @@ function Get-CostEstimate($path) {
         $entry = $null
         try { $entry = $line | ConvertFrom-Json -ErrorAction Stop } catch { continue }
         if ($null -eq $entry -or $entry.type -ne 'assistant') { continue }
+        if ($null -eq $entry.message -or -not ($entry.message -is [PSCustomObject])) { continue }
         $usage = $entry.message.usage
         if ($null -eq $usage) { continue }
         $model = $entry.message.model
@@ -153,6 +154,7 @@ function Get-CacheHitStats($path) {
         $entry = $null
         try { $entry = $line | ConvertFrom-Json -ErrorAction Stop } catch { continue }
         if ($null -eq $entry -or $entry.type -ne 'assistant') { continue }
+        if ($null -eq $entry.message -or -not ($entry.message -is [PSCustomObject])) { continue }
         $usage = $entry.message.usage
         if ($null -eq $usage) { continue }
         if ($null -ne $usage.input_tokens) { $inTok += [double]$usage.input_tokens }
@@ -221,7 +223,7 @@ if ($FetchJpyRate) {
     try {
         $resp = Invoke-RestMethod -Uri "https://api.frankfurter.dev/v1/latest?from=USD&to=JPY" -TimeoutSec 5
         $rate = $resp.rates.JPY
-        if ($null -ne $rate) {
+        if ($null -ne $rate -and "$rate" -match '^[0-9]+(\.[0-9]+)?$') {
             $tmp = "${jpyCachePath}.tmp.$PID"
             "${now}:${rate}" | Set-Content $tmp
             Move-Item -Force $tmp $jpyCachePath
@@ -586,7 +588,7 @@ if ($env:CC_STATUSLINE_JPY -ne '0') {
         $content = Get-Content $jpyCachePath -Raw
         if ($null -ne $content) {
             $parts = $content.Trim() -split ":", 2
-            if ($parts.Count -eq 2) {
+            if ($parts.Count -eq 2 -and $parts[1] -match '^[0-9]+(\.[0-9]+)?$') {
                 $r = $parts[1] -as [double]
                 if ($null -ne $r) {
                     $jpyRate = $r   # a stale rate still beats no rate; refreshed below

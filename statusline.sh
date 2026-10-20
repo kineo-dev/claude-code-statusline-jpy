@@ -15,6 +15,16 @@ C_DIM=$'\e[38;2;92;99;112m'        # labels
 SESSION_WINDOW_SEC=18000
 WEEK_WINDOW_SEC=604800
 
+strip_control_chars() {
+    # Remove C0 (0x00-0x1F), DEL (0x7F), and C1 (U+0080-U+009F)
+    # without corrupting UTF-8 multibyte sequences (e.g. Japanese).
+    if command -v perl >/dev/null 2>&1; then
+        perl -CSD -pe 's/[\x00-\x1f\x7f\x{0080}-\x{009f}]//g'
+    else
+        LC_ALL=C tr -d '\000-\037\177'
+    fi
+}
+
 color_for_pct() {
     local pct=$1
     if [ "$pct" -ge 80 ]; then printf "%s" "$C_RED"
@@ -164,7 +174,7 @@ fi
 # (best-effort sed extraction) plus an explicit hint instead of a silent blank line.
 if ! command -v jq >/dev/null 2>&1; then
     md=$(printf '%s' "$input" | sed -n 's/.*"display_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
-    [ -n "$md" ] && md=$(printf '%s' "$md" | tr -d '\000-\037\177-\237')
+    [ -n "$md" ] && md=$(printf '%s' "$md" | strip_control_chars)
     out=""
     [ -n "$md" ] && out="${C_PURPLE}$(printf '%s' "$md" | tr -d ' ')${C_RESET} "
     printf '%s' "${out}${C_DIM}[statusline: jq not found]${C_RESET}"
@@ -202,7 +212,7 @@ compute_cost_estimate() {
             sub("^[a-z]+\\.anthropic\\."; "") | sub("^anthropic\\."; "") |
             sub("@.*$"; "") | sub("-v[0-9]+:[0-9]+$"; "") |
             sub("\\[.*\\]$"; "") | sub("-[0-9]{8}$"; "");
-        reduce (inputs | fromjson? | objects | select(.type == "assistant") | .message // {} | select(.usage)
+        reduce (inputs | fromjson? | objects | select(.type == "assistant") | (.message | objects) // {} | select(.usage)
                 | { model: ((.model // "claude-sonnet-5") | norm_model), u: .usage }) as $m
         (0;
             . + ((price_for($m.model; (($m.u.input_tokens // 0) + ($m.u.cache_creation_input_tokens // 0) + ($m.u.cache_read_input_tokens // 0)))) as $r |
@@ -216,7 +226,7 @@ compute_cost_estimate() {
 
 compute_cache_hit_stats() {
     jq -rRn '
-        reduce (inputs | fromjson? | objects | select(.type == "assistant") | .message // {} | select(.usage) | .usage) as $u
+        reduce (inputs | fromjson? | objects | select(.type == "assistant") | (.message | objects) // {} | select(.usage) | .usage) as $u
         ({in:0, cr:0, cc:0};
             { in: (.in + ($u.input_tokens // 0)),
               cr: (.cr + ($u.cache_read_input_tokens // 0)),
@@ -260,15 +270,15 @@ eval "$jq_fields"
 [[ "$d7_reset" =~ ^[0-9]+$ ]] || d7_reset=""
 
 # model_display comes from the API response and is never escape-stripped
-# before reaching the terminal below. Strip all C0 control characters
-# (includes ESC=0x1B, so this also blocks OSC/CSI sequences such as an
-# OSC 52 clipboard write) so a malicious/compromised backend can't inject
-# terminal escape sequences via the displayed model name.
+# before reaching the terminal below. Strip all C0 control characters and
+# C1 Unicode code points (U+0080-U+009F, includes ESC=0x1B, so this also blocks
+# OSC/CSI sequences such as an OSC 52 clipboard write) so a malicious/compromised
+# backend can't inject terminal escape sequences via the displayed model name.
 if [ -n "$model_display" ]; then
-    model_display=$(printf '%s' "$model_display" | tr -d '\000-\037\177-\237')
+    model_display=$(printf '%s' "$model_display" | strip_control_chars)
 fi
 if [ -n "$effort_level" ]; then
-    effort_level=$(printf '%s' "$effort_level" | tr -d '\000-\037\177-\237')
+    effort_level=$(printf '%s' "$effort_level" | strip_control_chars)
 fi
 
 # === Determine subscriber status ===
@@ -381,7 +391,7 @@ if [ "${CC_STATUSLINE_JPY:-1}" != "0" ]; then
     jpy_fresh=""
     if [ -f "$JPY_CACHE" ]; then
         IFS=: read -r cached_ts cached_rate < "$JPY_CACHE"
-        if [ -n "$cached_rate" ]; then
+        if [[ "$cached_rate" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
             jpy_rate="$cached_rate"   # a stale rate still beats no rate; refreshed below
             [[ "$cached_ts" =~ ^[0-9]+$ ]] && [ $(( now - cached_ts )) -lt 604800 ] && jpy_fresh=1
         fi
@@ -393,7 +403,7 @@ if [ "${CC_STATUSLINE_JPY:-1}" != "0" ]; then
             touch "$JPY_LOCK" 2>/dev/null
             (
                 fetched=$(curl -sf --max-time 5 "https://api.frankfurter.dev/v1/latest?from=USD&to=JPY" | jq -r '.rates.JPY // empty')
-                if [ -n "$fetched" ]; then
+                if [[ "$fetched" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
                     printf '%s:%s' "$now" "$fetched" > "${JPY_CACHE}.tmp.$$" && mv "${JPY_CACHE}.tmp.$$" "$JPY_CACHE" && chmod 600 "$JPY_CACHE" 2>/dev/null
                     rm -f "$JPY_FAIL"
                 else
