@@ -59,7 +59,7 @@ function Get-DefaultEffort($norm) {
     if ([string]::IsNullOrWhiteSpace($norm)) { return "high" }
     $res = "high"
     switch -Regex ($norm) {
-        'opus-5-5|sonnet-5-5|haiku-5-5|Opus5\.5|Sonnet5\.5|Haiku5\.5' { $res = "medium"; break }
+        'opus-5-5|sonnet-5-5|haiku-5-5|fable-5-2|Opus5\.5|Sonnet5\.5|Haiku5\.5|Fable5\.2' { $res = "medium"; break }
         'opus-4-7|Opus4\.7'                     { $res = "xhigh"; break }
         default                                  { $res = "high"; break }
     }
@@ -112,6 +112,10 @@ function Get-PriceForModel($model, $promptTok = 0) {
         return @{ In = 0.10; Out = 0.50; CWrite = 0.125; CRead = 0.01 }
     } elseif ($model -cmatch '^claude-haiku-4-') {
         return @{ In = 1.00; Out = 5.00; CWrite = 1.25; CRead = 0.10 }
+    } elseif ($model -cmatch '^claude-(fable|mythos)-5-2(-|$)') {
+        return @{ In = 8.00; Out = 40.00; CWrite = 10.00; CRead = 0.20 }
+    } elseif ($model -cmatch '^claude-(fable|mythos)-5-1(-|$)') {
+        return @{ In = 10.00; Out = 50.00; CWrite = 12.50; CRead = 0.25 }
     } elseif ($model -cmatch '^claude-(fable|mythos)-') {
         return @{ In = 10.00; Out = 50.00; CWrite = 12.50; CRead = 1.00 }
     } else {

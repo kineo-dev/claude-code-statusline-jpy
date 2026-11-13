@@ -138,7 +138,7 @@ parse_model_label() {
 get_default_effort() {
     local norm="$1"
     case "$norm" in
-        *opus-5-5*|*sonnet-5-5*|*haiku-5-5*|*Opus5.5*|*Sonnet5.5*|*Haiku5.5*)
+        *opus-5-5*|*sonnet-5-5*|*haiku-5-5*|*fable-5-2*|*Opus5.5*|*Sonnet5.5*|*Haiku5.5*|*Fable5.2*)
             echo "medium"
             ;;
         *opus-4-7*|*Opus4.7*)
@@ -203,6 +203,8 @@ compute_cost_estimate() {
                 (if $pl > 100000 then {in:0.50, out:2.50, cwrite:0.625, cread:0.05}
                  else {in:0.10, out:0.50, cwrite:0.125, cread:0.01} end)
             elif ($model | test("^claude-haiku-4-")) then {in:1.00, out:5.00, cwrite:1.25, cread:0.10}
+            elif ($model | test("^claude-(fable|mythos)-5-2(-|$)")) then {in:8.00, out:40.00, cwrite:10.00, cread:0.20}
+            elif ($model | test("^claude-(fable|mythos)-5-1(-|$)")) then {in:10.00, out:50.00, cwrite:12.50, cread:0.25}
             elif ($model | test("^claude-(fable|mythos)-")) then {in:10.00, out:50.00, cwrite:12.50, cread:1.00}
             else sonnet55_rate  # unrecognized model id: fall back to current-gen Sonnet pricing
             end;

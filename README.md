@@ -31,17 +31,17 @@ API key user, over daily budget:
 !Opus5 Ctx:▰▰▰▱▱60%(Cach82%) Cst:!!▰▰▰▰▰$3.20(¥200 Today:¥510/¥500)
 ```
 
-Fable5.1 user:
+Fable5.2 user:
 
 ```
-!!Fable5.1 Ctx:▰▰▱▱▱40%(Cach82%)
+!!Fable5.2 Ctx:▰▰▱▱▱40%(Cach82%)
 ```
 
 ## Features
 
 | Field | Description |
 |---|---|
-| `Haiku5.5` / `Sonnet5` / `Sonnet5.5` / `!Opus5` / `!Opus5.5` / `!!Fable5.1` | Model name; all Opus models (including 5.5) show amber `!`, Fable shows red `!!` |
+| `Haiku5.5` / `Sonnet5` / `Sonnet5.5` / `!Opus5` / `!Opus5.5` / `!!Fable5.2` | Model name; all Opus models (including 5.5) show amber `!`, Fable shows red `!!` |
 | `Ses:XX%(HH:MM)` / `Ses:-` | 5-hour rate limit usage and reset time; shows `-` on Max when the API doesn't report limits |
 | `Week:XX%(XdXh)` / `Week:-` | 7-day rate limit usage and time until reset; shows `-` on Max when the API doesn't report limits |
 | `Ctx:▰▰▱▱▱XX%(CachXX%)` | Context window usage (5-segment bar); includes cache hit rate as `(CachXX%)` when transcript is available |
